@@ -3,12 +3,15 @@ package database
 import (
 	"books_crud_golang/internal/models"
 	"database/sql"
-	"fmt"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 )
+
+// ErrBookNotFound returned when a book with the given id does not exist.
+var ErrBookNotFound = errors.New("book not found")
 
 type BookStore struct {
 	db *sqlx.DB
@@ -20,7 +23,7 @@ func NewBookStore(db *sqlx.DB) *BookStore {
 
 func (store *BookStore) GetAllBooks() ([]models.Book, error) {
 	var books []models.Book
-	query := "SELECT id, title, author, is_available, created_at FROM books ORDER BY created_at DESC;"
+	query := "SELECT id, title, author, published_date, is_available, created_at FROM books ORDER BY created_at DESC;"
 
 	err := store.db.Select(&books, query)
 	log.Printf("Retrieved %d books from the database", len(books))
@@ -33,10 +36,10 @@ func (store *BookStore) GetAllBooks() ([]models.Book, error) {
 
 func (store *BookStore) GetBookByID(id int) (*models.Book, error) {
 	var book models.Book
-	query := "SELECT id, title, author, is_available, created_at FROM books WHERE id = $1"
+	query := "SELECT id, title, author, published_date, is_available, created_at FROM books WHERE id = $1"
 	err := store.db.Get(&book, query, id)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("Book with id %d not found", id)
+		return nil, ErrBookNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -45,12 +48,12 @@ func (store *BookStore) GetBookByID(id int) (*models.Book, error) {
 }
 
 func (store *BookStore) CreateBook(input *models.CreateBookInput) (*models.Book, error) {
-	query := `INSERT INTO books (title, author, is_available, created_at) VALUES ($1, $2, $3, $4) RETURNING id, created_at`
+	query := `INSERT INTO books (title, author, published_date, is_available, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, author, published_date, is_available, created_at`
 
 	now := time.Now()
 
 	var book models.Book
-	err := store.db.QueryRowx(query, input.Title, input.Author, input.IsAvailable, now).StructScan(&book)
+	err := store.db.QueryRowx(query, input.Title, input.Author, input.PublishedDate, input.IsAvailable, now).StructScan(&book)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +100,7 @@ func (store *BookStore) DeleteBook(id int) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("Book with id %d not found", id)
+		return ErrBookNotFound
 	}
 	return nil
 }

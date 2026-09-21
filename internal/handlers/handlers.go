@@ -4,6 +4,7 @@ import (
 	"books_crud_golang/internal/database"
 	"books_crud_golang/internal/models"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,8 +48,12 @@ func (h *Handlers) GetBook(w http.ResponseWriter, r *http.Request) {
 	}
 	book, err := h.store.GetBookByID(bookID)
 
-	if err != nil {
+	if errors.Is(err, database.ErrBookNotFound) {
 		respondWithError(w, http.StatusNotFound, "Book not found")
+		return
+	}
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve book")
 		return
 	}
 	respondWithJson(w, http.StatusOK, book)
@@ -89,6 +94,10 @@ func (h *Handlers) UpdateBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	book, err := h.store.UpdateBook(bookID, &input)
+	if errors.Is(err, database.ErrBookNotFound) {
+		respondWithError(w, http.StatusNotFound, "Book not found")
+		return
+	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to update book")
 		return
@@ -106,21 +115,15 @@ func (h *Handlers) DeleteBook(w http.ResponseWriter, r *http.Request) {
 
 	err = h.store.DeleteBook(bookID)
 	if err != nil {
+		if errors.Is(err, database.ErrBookNotFound) {
+			respondWithError(w, http.StatusNotFound, "Book not found")
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to delete book")
 		return
 	}
 	respondWithJson(w, http.StatusOK, map[string]string{"message": "Book deleted successfully"})
 }
-
-
-func (h *Handlers) FavoriteBook(w http.ResponseWriter, r *http.Request) {
-	bookID, err := getBookIDFromPath(r.URL.Path)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid book ID")
-		return
-	}
-	
-
 
 
 func getBookIDFromPath(path string) (int, error) {
