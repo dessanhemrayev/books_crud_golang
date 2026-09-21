@@ -216,7 +216,7 @@ Seed data: 5 books (The Great Gatsby, To Kill a Mockingbird, 1984, Pride and Pre
 
 - [ ] Favorites feature — `AddFavoriteBook` store method and `FavoriteBook` model exist, but no route/handler wiring yet
 - [ ] User store — `UserStore` is a stub
-- [ ] Published date is not included in list/get queries yet
+- [x] Published date is included in list/get queries
 - [x] Dockerfile for containerizing the API itself (multi-stage build, runs in `docker compose up`)
 - [ ] Automated tests, graceful shutdown, and structured logging
 
