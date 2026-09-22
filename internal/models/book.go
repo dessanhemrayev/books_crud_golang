@@ -14,12 +14,15 @@ type Book struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-
-type CreateBookInput struct {
+type BaseBook struct {
 	Title string `json:"title"`
 	Author string `json:"author"`
 	PublishedDate time.Time `json:"published_date"`
 	IsAvailable bool `json:"is_available"`
+}
+
+type CreateBookInput struct {
+	BaseBook
 }
 
 type UpdateBookInput struct {
