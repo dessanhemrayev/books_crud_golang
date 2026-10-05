@@ -19,3 +19,12 @@ WHERE NOT EXISTS (
 );
 
 -- +goose Down
+-- Up does not record inserted IDs; matching rows may predate the migration,
+-- have been edited, or be referenced by favorite_books.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    RAISE EXCEPTION '00002_seed is irreversible: seed rollback requires manual intervention';
+END;
+$$;
+-- +goose StatementEnd

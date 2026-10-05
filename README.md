@@ -114,6 +114,13 @@ curl http://localhost:8080/books
 
 ## Configuration
 
+`MIGRATION_TIMEOUT` bounds startup migrations (default `5m`). Set it to a positive
+Go duration such as `30s` or `10m`; invalid values or an exceeded timeout fail
+startup. Export it when running locally, or set it in `.env` for Docker Compose.
+
+The initial schema and seed migrations explicitly reject rollbacks because they
+can reuse pre-existing tables or rows and do not record ownership. Reverting them
+requires a manual plan that preserves existing, modified, and referenced data.
 
 Additional variables used by Docker Compose: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
 
