@@ -9,7 +9,7 @@ A simple REST API for managing books, built with Go's standard library (`net/htt
 - Method enforcement and request logging middleware
 - PostgreSQL access via [sqlx](https://github.com/jmoiron/sqlx) with a connection pool
 - Versioned migrations with [goose](https://github.com/pressly/goose), embedded into the binary — schema and seed data are applied automatically on startup
-- Non-destructive migrations: no `DROP TABLE` on `up`, and `down` sections are intentionally empty
+- Non-destructive migrations: no `DROP TABLE` on `up`, and `down` sections raise an exception to reject rollback
 - Partial updates — only the fields provided in the request body are changed
 
 ## Tech Stack
@@ -244,7 +244,14 @@ Create `00003_<description>.sql` in `internal/database/migrations/`:
 ALTER TABLE books ADD COLUMN isbn varchar(20);
 
 -- +goose Down
--- Удаление данных здесь намеренно не выполняется.
+-- Rollback requires a manual plan that preserves existing data.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    RAISE EXCEPTION '00003_<description> is irreversible: rollback requires manual intervention';
+END;
+$$;
+-- +goose StatementEnd
 ```
 
 Restart the application; goose applies the new file on boot.
@@ -252,7 +259,7 @@ Restart the application; goose applies the new file on boot.
 ### Design decision: migrations never delete data
 
 - `up` sections use `CREATE TABLE IF NOT EXISTS` and idempotent inserts (`ON CONFLICT DO NOTHING`, `WHERE NOT EXISTS`) — rerunning the application never drops or duplicates rows.
-- `down` sections are intentionally empty. `goose down` only removes the record from `goose_db_version`; tables and data stay in place.
+- `down` sections raise an exception to reject rollback. `goose down` fails without changing the version record in `goose_db_version`; tables and data stay in place.
 
 The trade-off: a mistake in a migration cannot be rolled back. Fix it with a new forward migration instead. To reset the database entirely, drop the volume — this destroys all data:
 
