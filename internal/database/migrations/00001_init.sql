@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS favorite_books (
 );
 
 -- +goose Down
+-- Up may reuse existing tables, so their ownership cannot be determined safely.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    RAISE EXCEPTION '00001_init is irreversible: schema rollback requires manual intervention';
+END;
+$$;
+-- +goose StatementEnd
