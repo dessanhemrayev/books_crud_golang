@@ -8,7 +8,8 @@ A simple REST API for managing books, built with Go's standard library (`net/htt
 - JSON request/response handling with proper HTTP status codes
 - Method enforcement and request logging middleware
 - PostgreSQL access via [sqlx](https://github.com/jmoiron/sqlx) with a connection pool
-- One-command database setup with Docker Compose (`sql/init.sql` creates tables and seeds sample data automatically)
+- Versioned migrations with [goose](https://github.com/pressly/goose), embedded into the binary — schema and seed data are applied automatically on startup
+- Non-destructive migrations: no `DROP TABLE` on `up`, and `down` sections are intentionally empty
 - Partial updates — only the fields provided in the request body are changed
 
 ## Tech Stack
@@ -19,6 +20,7 @@ A simple REST API for managing books, built with Go's standard library (`net/htt
 | HTTP       | Standard library (`net/http`)               |
 | Database   | PostgreSQL                                  |
 | DB access  | [sqlx](https://github.com/jmoiron/sqlx) + [lib/pq](https://github.com/lib/pq) |
+| Migrations | [goose](https://github.com/pressly/goose) (embedded via `go:embed`)   |
 | Containers | Docker Compose (PostgreSQL)                 |
 
 ## Project Structure
@@ -30,15 +32,16 @@ books_crud_golang/
 │       └── main.go            # Entry point: routing, method checks, logging middleware
 ├── internal/
 │   ├── database/
-│   │   ├── database.go        # PostgreSQL connection (sqlx) and pool settings
+│   │   ├── database.go        # PostgreSQL connection (sqlx), pool settings, goose migration runner
+│   │   ├── migrations/        # Versioned SQL migrations, embedded into the binary
+│   │   │   ├── 00001_init.sql # users, books, favorite_books tables
+│   │   │   └── 00002_seed.sql # Sample books and users
 │   │   ├── books.go           # Book data access layer (CRUD queries)
 │   │   └── users.go           # User data access layer (in progress)
 │   ├── handlers/
 │   │   └── handlers.go        # HTTP handlers (JSON encoding/decoding, validation)
 │   └── models/
 │       └── book.go            # Data models (Book, create/update inputs, FavoriteBook)
-├── sql/
-│   └── init.sql               # Schema creation + seed data (runs on first DB start)
 ├── docker-compose.yml           # PostgreSQL + API services (ports 5433 / 8080)
 ├── Dockerfile                   # Multi-stage build of the API image
 ├── .dockerignore                # Keeps .env and non-build files out of the image
@@ -85,7 +88,7 @@ docker compose up -d --build
 
 This builds the API image from the Dockerfile and starts two containers:
 
-- **postgres** — mapped to **localhost:5433** (data is persisted in the `books_pg_data` volume). On first start, `sql/init.sql` is executed automatically — it creates the `users`, `books`, and `favorite_books` tables and inserts sample data (5 classic books and 3 users).
+- **postgres** — mapped to **localhost:5433** (data is persisted in the `books_pg_data` volume). Schema and sample data are created by the API on startup via goose migrations.
 - **api** — the Books CRUD API, mapped to **localhost:8080**. It waits for the Postgres healthcheck before starting, so no connection race on boot.
 
 ### 4. Run the API locally (alternative to the api container)
@@ -103,6 +106,7 @@ The server starts on port `8080` by default. You should see:
 
 ```
 Successfully connected to database
+Migrations applied
 Server is running on :8080
 ```
 
@@ -202,7 +206,7 @@ curl -X DELETE http://localhost:8080/books/1
 
 ## Database Schema
 
-Defined in [`sql/init.sql`](sql/init.sql):
+Created by migrations in [`internal/database/migrations/`](internal/database/migrations):
 
 | Table             | Description                                                            |
 |-------------------|------------------------------------------------------------------------|
@@ -212,11 +216,49 @@ Defined in [`sql/init.sql`](sql/init.sql):
 
 Seed data: 5 books (The Great Gatsby, To Kill a Mockingbird, 1984, Pride and Prejudice, The Catcher in the Rye) and 3 users (`user1`–`user3`).
 
+## Migrations
+
+Migrations are plain SQL files in `internal/database/migrations/`, embedded into the binary with `go:embed` (see `internal/database/database.go`). They run automatically on every startup — no separate migration step, and nothing to copy into the Docker image.
+
+```
+internal/database/migrations/
+├── 00001_init.sql   # up: CREATE TABLE IF NOT EXISTS ...
+└── 00002_seed.sql   # up: idempotent seed data
+```
+
+Applied versions are tracked by goose in the `goose_db_version` table, so each file runs exactly once.
+
+### Adding a migration
+
+Create `00003_<description>.sql` in `internal/database/migrations/`:
+
+```sql
+-- +goose Up
+ALTER TABLE books ADD COLUMN isbn varchar(20);
+
+-- +goose Down
+-- Удаление данных здесь намеренно не выполняется.
+```
+
+Restart the application; goose applies the new file on boot.
+
+### Design decision: migrations never delete data
+
+- `up` sections use `CREATE TABLE IF NOT EXISTS` and idempotent inserts (`ON CONFLICT DO NOTHING`, `WHERE NOT EXISTS`) — rerunning the application never drops or duplicates rows.
+- `down` sections are intentionally empty. `goose down` only removes the record from `goose_db_version`; tables and data stay in place.
+
+The trade-off: a mistake in a migration cannot be rolled back. Fix it with a new forward migration instead. To reset the database entirely, drop the volume — this destroys all data:
+
+```bash
+docker compose down -v
+```
+
 ## Work in Progress
 
 - [ ] Favorites feature — `AddFavoriteBook` store method and `FavoriteBook` model exist, but no route/handler wiring yet
 - [ ] User store — `UserStore` is a stub
 - [x] Published date is included in list/get queries
 - [x] Dockerfile for containerizing the API itself (multi-stage build, runs in `docker compose up`)
+- [x] Versioned migrations with goose, embedded in the binary
 - [ ] Automated tests, graceful shutdown, and structured logging
 
