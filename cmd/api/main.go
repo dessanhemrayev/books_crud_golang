@@ -28,8 +28,13 @@ func main() {
 		return
 	}
 	log.Println("Successfully connected to database")
-	
+
 	defer db.Close()
+
+	if err := database.RunMigrations(db); err != nil {
+		log.Fatal("Failed to run migrations: ", err)
+	}
+	log.Println("Migrations applied")
 	log.Printf("Server is running on port %s", serverPort)
 
 	taskStore := database.NewBookStore(db)
